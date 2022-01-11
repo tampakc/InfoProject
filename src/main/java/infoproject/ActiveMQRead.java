@@ -19,6 +19,7 @@
 package infoproject;
 
 import com.datastax.driver.core.LocalDate;
+import com.datastax.driver.mapping.Mapper;
 import com.datastax.driver.mapping.annotations.*;
 import org.apache.activemq.ActiveMQConnectionFactory;
 
@@ -47,7 +48,7 @@ public class ActiveMQRead {
 	static final Time windowTime = Time.minutes(2);
 
 	@Table(keyspace = "infosystems", name = "daily")
-	public class DailyData {
+	public static class DailyData {
 
 		@Column(name = "day")
 		private LocalDate day = null;
@@ -66,13 +67,20 @@ public class ActiveMQRead {
 
 		public DailyData() {}
 
-		public DailyData(LocalDate day, int sum, int min, int max, double avg) {
+		public DailyData(LocalDate dayin, int sumin, int minin, int maxin, double avgin) {
+			day = dayin;
+			sum = sumin;
+			min = minin;
+			max = maxin;
+			avg = avgin;
+		}
+		/*public DailyData(LocalDate day, int sum, int min, int max, double avg) {
 			this.setDay(day);
 			this.setSum(sum);
 			this.setMin(min);
 			this.setMax(max);
 			this.setAvg(avg);
-		}
+		} */
 
 		public LocalDate getDay() {
 			return day;
@@ -121,34 +129,38 @@ public class ActiveMQRead {
 	}
 
 	@Table(keyspace = "infosystems", name = "late")
-	public class LateEvent {
+	public static class LateEvent {
 		@Column(name = "timestamp")
-		private Date timestamp = null;
+		private Date timestamp = new Date();
 
 		@Column(name = "value")
 		private int value = 0;
 
 		public LateEvent() {}
 
-		public LateEvent(Date timestamp, int value) {
+		public LateEvent(Date timein, int valin){
+			timestamp = timein;
+			value = valin;
+		}
+		/*public LateEvent(Date timestamp, int value) {
 			this.setTimestamp(timestamp);
 			this.setValue(value);
-		}
+		}*/
 
 		public Date getTimestamp() {
 			return timestamp;
 		}
 
-		public void setTimestamp(Date timestamp) {
-			this.timestamp = timestamp;
+		public void setTimestamp(Date timein) {
+			timestamp = timein;
 		}
 
 		public int getValue() {
 			return value;
 		}
 
-		public void setValue(int value) {
-			this.value = value;
+		public void setValue(int valin) {
+			value = valin;
 		}
 
 		public String toString() {
@@ -158,6 +170,8 @@ public class ActiveMQRead {
 
 	public static void main(String[] args) throws Exception {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+
 
 		AMQSource<Tuple2<Long, Integer>> amqSource;
 		ActiveMQConnectionFactory connectionFactory;
@@ -203,11 +217,17 @@ public class ActiveMQRead {
 
 		final OutputTag<Tuple2<Long, Integer>> lateOutputTag = new OutputTag<Tuple2<Long, Integer>>("late-data"){};
 
-		SingleOutputStreamOperator<Tuple5<Integer, Integer, Integer, Double, LocalDate>> alerts = input
+		SingleOutputStreamOperator<DailyData> alerts = input
 				//.keyBy(Tuple2<Long, Integer>::getKey)
 				.windowAll(TumblingEventTimeWindows.of(windowTime))
 				.sideOutputLateData(lateOutputTag)
 				.aggregate(new WindowAggregation())
+				.map(new MapFunction<Tuple5<Integer, Integer, Integer, Double, LocalDate>, DailyData>() {
+					@Override
+					public DailyData map(Tuple5<Integer, Integer, Integer, Double, LocalDate> rawData) throws Exception {
+						return new DailyData(rawData.f4, rawData.f0, rawData.f1, rawData.f2, rawData.f3);
+					}
+				})
 				/*.windowAll(TumblingEventTimeWindows.of(windowTime))
 				.reduce(new ReduceFunction<Tuple5<Long, Long, Long, Long, Long>>() {
 					@Override
@@ -229,38 +249,26 @@ public class ActiveMQRead {
 				})*/
 				.name("aggregation");
 
-		alerts
-				.map(new MapFunction<Tuple5<Integer, Integer, Integer, Double, LocalDate>, String>() {
-			@Override
-			public String map(Tuple5<Integer, Integer, Integer, Double, LocalDate> Tup) throws Exception {
-				String str1 = Tup.f0.toString();
-				String str2 = Tup.f1.toString();
-				String str3 = Tup.f2.toString();
-				String str4 = Tup.f3.toString();
-				String str5 = Tup.f4.toString();
+		alerts.addSink(new PrintSinkFunction<>());
 
-				return str5 + " : " + str1 + " " + str2 + " " + str3 + " " + str4;
-			}
-		})
-				.addSink(new PrintSinkFunction<>());
-
-		CassandraSink.addSink(alerts)
-				.setQuery("INSERT INTO infosystems.daily (sum, min, max, avg, day) VALUES (?, ?, ?, ?, ?)")
+		/*CassandraSink.addSink(alerts)
+				//.setQuery("INSERT INTO infosystems.daily (sum, min, max, avg, day) VALUES (?, ?, ?, ?, ?)")
 				.setHost("localhost")
-				.build();
+				.build();*/
 
-		DataStream<Tuple2<Date, Integer>> side = alerts
+		DataStream<LateEvent> late = alerts
 				.getSideOutput(lateOutputTag)
-				.map(new MapFunction<Tuple2<Long, Integer>, Tuple2<Date, Integer>>() {
+				.map(new MapFunction<Tuple2<Long, Integer>, LateEvent>() {
 					@Override
-					public Tuple2<Date, Integer> map(Tuple2<Long, Integer> in) throws Exception {
-						return new Tuple2<>(new Date(in.f0), in.f1);
+					public LateEvent map(Tuple2<Long, Integer> in) throws Exception {
+						return new LateEvent(new Date(in.f0), in.f1);
 					}
 				});
 
-		CassandraSink.addSink(side)
-				.setQuery("INSERT INTO infosystems.late (time, value) VALUES (?, ?)")
+		CassandraSink.addSink(late)
+				//.setQuery("INSERT INTO infosystems.late (time, value) VALUES (?, ?)")
 				.setHost("localhost")
+				.setMapperOptions(() -> new Mapper.Option[]{Mapper.Option.saveNullFields(true)})
 				.build();
 
 		env.execute("ActiveMQ Aggregate");
