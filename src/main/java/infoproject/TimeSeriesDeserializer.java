@@ -1,7 +1,9 @@
 package infoproject;
 
 import org.apache.flink.api.common.serialization.DeserializationSchema;
+import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.java.tuple.Tuple2;
 import scala.runtime.StringFormat;
 
 import java.io.IOException;
@@ -19,7 +21,7 @@ public class TimeSeriesDeserializer implements DeserializationSchema {
         int val = Integer.valueOf(value);
         long time = Long.valueOf(timestamp);
 
-        return new TimeSeriesData(time, val);
+        return new Tuple2<Long, Integer>(time, val);
     }
 
     @Override
@@ -29,6 +31,6 @@ public class TimeSeriesDeserializer implements DeserializationSchema {
 
     @Override
     public TypeInformation getProducedType() {
-        return TypeInformation.of(TimeSeriesData.class);
+        return TypeInformation.of(new TypeHint<Tuple2<Long, Integer>>(){});
     }
 }

@@ -18,8 +18,10 @@
 
 package infoproject;
 
+import com.datastax.driver.core.LocalDate;
 import org.apache.commons.lang3.time.DateUtils;
 import org.apache.flink.api.common.functions.AggregateFunction;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.api.java.tuple.Tuple5;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
@@ -28,6 +30,7 @@ import org.apache.flink.walkthrough.common.entity.Alert;
 import org.apache.flink.walkthrough.common.entity.Transaction;
 
 import java.sql.Time;
+
 import java.util.Calendar;
 import java.util.Date;
 import java.util.TimeZone;
@@ -40,40 +43,38 @@ import static java.util.Calendar.*;
 
 // Accumulator holds (SUM, MIN, MAX, COUNT, WINDOW) in a Tuple4, and aggregate function returns (SUM, MIN, MAX, AVG, WINDOW)
 public class WindowAggregation
-		implements AggregateFunction<TimeSeriesData, Tuple5<Long, Long, Long, Long, Long>, Tuple5<Long, Long, Long, Double, Long>> {
+		implements AggregateFunction<Tuple2<Long, Integer>, Tuple5<Integer, Integer, Integer, Integer, Long>, Tuple5<Integer, Integer, Integer, Double, LocalDate>> {
 	@Override
-	public Tuple5<Long, Long, Long, Long, Long> createAccumulator() {
+	public Tuple5<Integer, Integer, Integer, Integer, Long> createAccumulator() {
 		long time = new Date().getTime();
-		return new Tuple5<>(0L, Long.MAX_VALUE, Long.MIN_VALUE, 0L, time);
+		return new Tuple5<>(0, Integer.MAX_VALUE, Integer.MIN_VALUE, 0, time);
 	}
 
 	@Override
-	public Tuple5<Long, Long, Long, Long, Long> add(TimeSeriesData value, Tuple5<Long, Long, Long, Long, Long> accumulator) {
-		long val = (long) value.getValue();
-		return new Tuple5<>(
-				accumulator.f0 + value.getValue(),
-				Math.min(accumulator.f1, val),
-				Math.max(accumulator.f2, val),
+	public Tuple5<Integer, Integer, Integer, Integer, Long> add(Tuple2<Long, Integer> value, Tuple5<Integer, Integer, Integer, Integer, Long> accumulator) {
+		return new Tuple5<Integer, Integer, Integer, Integer, Long>(
+				accumulator.f0 + value.f1,
+				Math.min(accumulator.f1, value.f1),
+				Math.max(accumulator.f2, value.f1),
 				accumulator.f3 + 1,
-				new Date(value.getTimestamp()).getTime()
+				new Date(value.f0).getTime()
 		);
 	}
 
 	@Override
-	public Tuple5<Long, Long, Long, Double, Long> getResult(Tuple5<Long, Long, Long, Long, Long> accumulator) {
-		Date day = new Date(accumulator.f4);
-		day = DateUtils.truncate(day, DAY_OF_MONTH);
+	public Tuple5<Integer, Integer, Integer, Double, LocalDate> getResult(Tuple5<Integer, Integer, Integer, Integer, Long> accumulator) {
+		LocalDate day = LocalDate.fromMillisSinceEpoch(accumulator.f4);
 		return new Tuple5<>(
 				accumulator.f0,
 				accumulator.f1,
 				accumulator.f2,
 				((double) accumulator.f0)/accumulator.f3,
-				day.getTime()
+				day
 		);
 	}
 
 	@Override
-	public Tuple5<Long, Long, Long, Long, Long> merge(Tuple5<Long, Long, Long, Long, Long> a, Tuple5<Long, Long, Long, Long, Long> b) {
+	public Tuple5<Integer, Integer, Integer, Integer, Long> merge(Tuple5<Integer, Integer, Integer, Integer, Long> a, Tuple5<Integer, Integer, Integer, Integer, Long> b) {
 		return new Tuple5<>(a.f0 + b.f0, Math.min(a.f1, b.f1), Math.max(a.f2, b.f2), a.f3 + b.f3, a.f4);
 	}
 }
