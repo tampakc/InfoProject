@@ -22,26 +22,31 @@ import org.apache.activemq.ActiveMQConnectionFactory;
 
 import org.apache.flink.api.common.eventtime.*;
 import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.api.java.tuple.Tuple4;
+import org.apache.flink.api.java.tuple.Tuple5;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.streaming.api.functions.sink.PrintSinkFunction;
 import org.apache.flink.streaming.api.functions.sink.filesystem.StreamingFileSink;
+import org.apache.flink.streaming.api.functions.windowing.ProcessAllWindowFunction;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
+import org.apache.flink.streaming.api.windowing.windows.Window;
 import org.apache.flink.streaming.connectors.activemq.AMQSource;
 import org.apache.flink.streaming.connectors.activemq.AMQSourceConfig;
+import org.apache.flink.util.Collector;
 import org.apache.flink.walkthrough.common.entity.Alert;
 import org.apache.flink.walkthrough.common.sink.AlertSink;
 
 import javax.jms.*;
+import java.util.Date;
 
 public class ActiveMQRead {
 
-
-
-
+	static final Time windowTime = Time.minutes(2);
 
 
 	public static void main(String[] args) throws Exception {
@@ -91,22 +96,42 @@ public class ActiveMQRead {
 
 		//input.print();
 
-		DataStream<Tuple4<Long, Long, Long, Double>> alerts = input
-				.keyBy(TimeSeriesData::getKey)
-				.window(TumblingEventTimeWindows.of(Time.minutes(2)))
+		DataStream<Tuple5<Long, Long, Long, Double, Long>> alerts = input
+				//.keyBy(TimeSeriesData::getKey)
+				.windowAll(TumblingEventTimeWindows.of(windowTime))
 				.aggregate(new WindowAggregation())
+				/*.windowAll(TumblingEventTimeWindows.of(windowTime))
+				.reduce(new ReduceFunction<Tuple5<Long, Long, Long, Long, Long>>() {
+					@Override
+					public Tuple5<Long, Long, Long, Long, Long> reduce(Tuple5<Long, Long, Long, Long, Long> t0, Tuple5<Long, Long, Long, Long, Long> t1) throws Exception {
+						return new Tuple5<>(
+								t0.f0 + t1.f0,
+								Math.min(t0.f1, t1.f1),
+								Math.max(t0.f2, t1.f2),
+								t0.f3 + t1.f3,
+								t0.f4
+						);
+					}
+				})
+				.process(new ProcessFunction<Tuple5<Long, Long, Long, Long, Long>, Tuple5<Long, Long, Long, Double, Long>>() {
+					@Override
+					public void processElement(Tuple5<Long, Long, Long, Long, Long> longLongLongLongLongTuple5, ProcessFunction<Tuple5<Long, Long, Long, Long, Long>, Tuple5<Long, Long, Long, Double, Long>>.Context context, Collector<Tuple5<Long, Long, Long, Double, Long>> collector) throws Exception {
+						
+					}
+				})*/
 				.name("aggregation");
 
 		alerts
-				.map(new MapFunction<Tuple4<Long, Long, Long, Double>, String>() {
+				.map(new MapFunction<Tuple5<Long, Long, Long, Double, Long>, String>() {
 			@Override
-			public String map(Tuple4<Long, Long, Long, Double> Tup) throws Exception {
+			public String map(Tuple5<Long, Long, Long, Double, Long> Tup) throws Exception {
 				String str1 = Tup.f0.toString();
 				String str2 = Tup.f1.toString();
 				String str3 = Tup.f2.toString();
 				String str4 = Tup.f3.toString();
+				String str5 = new Date(Tup.f4).toString();
 
-				return str1 + " " + str2 + " " + str3 + " " + str4;
+				return str5 + " : " + str1 + " " + str2 + " " + str3 + " " + str4;
 			}
 		})
 				.addSink(new PrintSinkFunction<>());
