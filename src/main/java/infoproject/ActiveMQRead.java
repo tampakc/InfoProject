@@ -24,9 +24,12 @@ import org.apache.flink.api.common.eventtime.*;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.api.java.tuple.Tuple;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.api.java.tuple.Tuple5;
 import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.streaming.api.functions.sink.PrintSinkFunction;
@@ -37,7 +40,9 @@ import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.windows.Window;
 import org.apache.flink.streaming.connectors.activemq.AMQSource;
 import org.apache.flink.streaming.connectors.activemq.AMQSourceConfig;
+import org.apache.flink.streaming.connectors.cassandra.CassandraSink;
 import org.apache.flink.util.Collector;
+import org.apache.flink.util.OutputTag;
 import org.apache.flink.walkthrough.common.entity.Alert;
 import org.apache.flink.walkthrough.common.sink.AlertSink;
 
@@ -94,11 +99,12 @@ public class ActiveMQRead {
 				})
 				.name("transactions");
 
-		//input.print();
+		final OutputTag<TimeSeriesData> lateOutputTag = new OutputTag<TimeSeriesData>("late-data");
 
-		DataStream<Tuple5<Long, Long, Long, Double, Long>> alerts = input
+		SingleOutputStreamOperator<Tuple5<Long, Long, Long, Double, Long>> alerts = input
 				//.keyBy(TimeSeriesData::getKey)
 				.windowAll(TumblingEventTimeWindows.of(windowTime))
+				.sideOutputLateData(lateOutputTag)
 				.aggregate(new WindowAggregation())
 				/*.windowAll(TumblingEventTimeWindows.of(windowTime))
 				.reduce(new ReduceFunction<Tuple5<Long, Long, Long, Long, Long>>() {
@@ -135,6 +141,17 @@ public class ActiveMQRead {
 			}
 		})
 				.addSink(new PrintSinkFunction<>());
+
+		CassandraSink.addSink(alerts)
+				.setQuery("INSERT INTO daily (sum, min, max, avg, day) VALUES (?, ?, ?, ?, ?)")
+				.setHost("localhost")
+				.setDefaultKeyspace("infosystems")
+				.build();
+
+		DataStream<Tuple2<Long, Long>> side = alerts
+				.getSideOutput(lateOutputTag)
+				.
+				.process()
 		//input.addSink(new PrintSinkFunction<TimeSeriesData>());
 
 
