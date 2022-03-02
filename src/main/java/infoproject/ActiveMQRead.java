@@ -34,6 +34,7 @@ import org.apache.flink.api.java.tuple.Tuple1;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.api.java.tuple.Tuple5;
+import org.apache.flink.streaming.api.datastream.AllWindowedStream;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -115,17 +116,20 @@ public class ActiveMQRead {
 
 		final OutputTag<Tuple2<Long, Integer>> lateOutputTag = new OutputTag<Tuple2<Long, Integer>>("late-data"){};
 
-		SingleOutputStreamOperator<Tuple5<Integer, Integer, Integer, Double, Date>> alerts = input.
+		SingleOutputStreamOperator<Tuple5<Integer, Integer, Integer, Integer, Date>> windowed = input.
 				windowAll(TumblingEventTimeWindows.of(windowTime)).
 				sideOutputLateData(lateOutputTag).
 				apply(new AllWindowFunction<Tuple2<Long, Integer>, Tuple5<Integer, Integer, Integer, Integer, Date>, TimeWindow>() {
 						  @Override
 						  public void apply(TimeWindow timeWindow, Iterable<Tuple2<Long, Integer>> iterable, Collector<Tuple5<Integer, Integer, Integer, Integer, Date>> collector) throws Exception {
-							  for(Tuple2<Long, Integer> in : iterable)
+							  for (Tuple2<Long, Integer> in : iterable)
 								  collector.collect(new Tuple5<>(in.f1, in.f1, in.f1, 1, new Date(timeWindow.getStart())));
 						  }
 					  }
-				).
+
+				);
+
+		SingleOutputStreamOperator<Tuple5<Integer, Integer, Integer, Double, Date>> alerts = windowed.
 				keyBy(4).
 				reduce(new ReduceFunction<Tuple5<Integer, Integer, Integer, Integer, Date>>() {
 					@Override
@@ -180,7 +184,7 @@ public class ActiveMQRead {
 				.setHost("localhost")
 				.build();
 
-		DataStream<Tuple2<Date, Integer>> late = alerts
+		DataStream<Tuple2<Date, Integer>> late = windowed
 				.getSideOutput(lateOutputTag)
 				.map(new MapFunction<Tuple2<Long, Integer>, Tuple2<Date, Integer>>() {
 					@Override
@@ -205,8 +209,6 @@ public class ActiveMQRead {
 				return new Tuple5<>(LocalDate.fromMillisSinceEpoch(tup.f0),1,1,1,0.0);
 			}
 		});*/
-
-		DataStream<Tuple5<LocalDate, Integer, Integer, Integer, Double>> test = env.fromElements(new Tuple5<>(LocalDate.fromMillisSinceEpoch(new Date().getTime()), 1, 1, 1, 0.1));
 
 		/*CassandraSink.addSink(test)
 				.setQuery("INSERT INTO infosystems.late (time, value) VALUES (?, ?);")
