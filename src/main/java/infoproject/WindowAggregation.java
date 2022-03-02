@@ -18,24 +18,11 @@
 
 package infoproject;
 
-import com.datastax.driver.core.LocalDate;
-import org.apache.commons.lang3.time.DateUtils;
 import org.apache.flink.api.common.functions.AggregateFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.api.java.tuple.Tuple5;
-import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
-import org.apache.flink.util.Collector;
-import org.apache.flink.walkthrough.common.entity.Alert;
-import org.apache.flink.walkthrough.common.entity.Transaction;
 
-import java.sql.Time;
-
-import java.util.Calendar;
-import java.util.Date;
-import java.util.TimeZone;
-
-import static java.util.Calendar.*;
+import java.sql.Date;
 
 /**
  * Skeleton code for implementing a fraud detector.
@@ -43,16 +30,16 @@ import static java.util.Calendar.*;
 
 // Accumulator holds (SUM, MIN, MAX, COUNT, WINDOW) in a Tuple4, and aggregate function returns (SUM, MIN, MAX, AVG, WINDOW)
 public class WindowAggregation
-		implements AggregateFunction<Tuple2<Long, Integer>, Tuple5<Integer, Integer, Integer, Integer, Long>, Tuple5<Integer, Integer, Integer, Double, LocalDate>> {
+		implements AggregateFunction<Tuple2<Long, Integer>, Tuple5<Integer, Integer, Integer, Integer, Long>, Tuple5<Integer, Integer, Integer, Double, Date>> {
 	@Override
 	public Tuple5<Integer, Integer, Integer, Integer, Long> createAccumulator() {
-		long time = new Date().getTime();
+		long time = new java.util.Date().getTime();
 		return new Tuple5<>(0, Integer.MAX_VALUE, Integer.MIN_VALUE, 0, time);
 	}
 
 	@Override
 	public Tuple5<Integer, Integer, Integer, Integer, Long> add(Tuple2<Long, Integer> value, Tuple5<Integer, Integer, Integer, Integer, Long> accumulator) {
-		return new Tuple5<Integer, Integer, Integer, Integer, Long>(
+		return new Tuple5<>(
 				accumulator.f0 + value.f1,
 				Math.min(accumulator.f1, value.f1),
 				Math.max(accumulator.f2, value.f1),
@@ -62,8 +49,8 @@ public class WindowAggregation
 	}
 
 	@Override
-	public Tuple5<Integer, Integer, Integer, Double, LocalDate> getResult(Tuple5<Integer, Integer, Integer, Integer, Long> accumulator) {
-		LocalDate day = LocalDate.fromMillisSinceEpoch(accumulator.f4);
+	public Tuple5<Integer, Integer, Integer, Double, Date> getResult(Tuple5<Integer, Integer, Integer, Integer, Long> accumulator) {
+		Date day = new Date(accumulator.f4);
 		return new Tuple5<>(
 				accumulator.f0,
 				accumulator.f1,
