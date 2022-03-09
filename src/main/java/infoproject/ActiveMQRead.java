@@ -18,52 +18,34 @@
 
 package infoproject;
 
-import com.datastax.driver.core.Cluster;
-import com.datastax.driver.core.CodecRegistry;
-import com.datastax.driver.core.LocalDate;
-import com.datastax.driver.mapping.Mapper;
-import com.datastax.driver.mapping.annotations.*;
 import org.apache.activemq.ActiveMQConnectionFactory;
-
 import org.apache.flink.api.common.eventtime.*;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
-import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.tuple.Tuple1;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.api.java.tuple.Tuple5;
-import org.apache.flink.streaming.api.datastream.AllWindowedStream;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.streaming.api.functions.sink.PrintSinkFunction;
 import org.apache.flink.streaming.api.functions.windowing.AllWindowFunction;
-import org.apache.flink.streaming.api.functions.windowing.ProcessAllWindowFunction;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
-import org.apache.flink.streaming.api.windowing.windows.Window;
 import org.apache.flink.streaming.connectors.activemq.AMQSource;
 import org.apache.flink.streaming.connectors.activemq.AMQSourceConfig;
 import org.apache.flink.streaming.connectors.cassandra.CassandraSink;
-import org.apache.flink.streaming.connectors.cassandra.ClusterBuilder;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.OutputTag;
-import org.w3c.dom.TypeInfo;
-//import org.apache.flink.streaming.api.scala.DataStream;
 
 import javax.jms.*;
-import javax.xml.crypto.Data;
-import java.time.Instant;
 import java.util.Date;
-import java.text.SimpleDateFormat;
 
 public class ActiveMQRead {
 
-	static final Time windowTime = Time.minutes(2);
+	static final Time windowTime = Time.hours(6);
 
 
 	public static void main(String[] args) throws Exception {
@@ -180,7 +162,7 @@ public class ActiveMQRead {
 		input.addSink(new PrintSinkFunction<>());
 
 		CassandraSink.addSink(alerts)
-				.setQuery("INSERT INTO infosystems.daily (sum, min, max, avg, window) VALUES (?, ?, ?, ?, ?)")
+				.setQuery("INSERT INTO infosystems.statistics (sum, min, max, avg, window, sensor_id) VALUES (?, ?, ?, ?, ?, 1)")
 				.setHost("localhost")
 				.build();
 
@@ -196,40 +178,10 @@ public class ActiveMQRead {
 		late.addSink(new PrintSinkFunction<>());
 
 		CassandraSink.addSink(late)
-				.setQuery("INSERT INTO infosystems.late (time, value) VALUES (?, ?);")
+				.setQuery("INSERT INTO infosystems.late (time, value, sensor_id) VALUES (?, ?, 1);")
 				.setHost("localhost")
 				.build();
 
-
-		/*DataStream<Tuple5<LocalDate, Integer, Integer, Integer, Double>> test = input.map(new MapFunction<Tuple2<Long, Integer>, Tuple5<LocalDate, Integer, Integer, Integer, Double>>() {
-			@Override
-			public Tuple5<LocalDate, Integer, Integer, Integer, Double> map(Tuple2<Long, Integer> tup) throws Exception {
-				String pattern = "yyyy-MM-dd";
-				SimpleDateFormat simpleDateFormat = new SimpleDateFormat(pattern);
-				return new Tuple5<>(LocalDate.fromMillisSinceEpoch(tup.f0),1,1,1,0.0);
-			}
-		});*/
-
-		/*CassandraSink.addSink(test)
-				.setQuery("INSERT INTO infosystems.late (time, value) VALUES (?, ?);")
-				.setHost("localhost")
-				.build();*/
-
-
-		/*CassandraSink.addSink(test)
-				.setQuery("INSERT INTO infosystems.daily (day, min, max, sum, avg) VALUES (?, ?, ?, ?, ?);")
-				.setHost("localhost")
-				.build();
-
-		 */
-
-		//DataStream<Tuple1<LocalDate>> test2 = env.fromElements(new Tuple1<>(LocalDate.fromMillisSinceEpoch(1645217449)));
-		DataStream<Tuple1<Date>> test2 = env.fromElements(new Tuple1<>(new Date()));
-		//DataStream<Tuple1<String>> test2 = env.fromElements(new Tuple1<>("2011-02-03 04:05+0000"), new Tuple1<>("2012-02-03 04:05+0000"));
- 		CassandraSink.addSink(test2).
-				setQuery("INSERT INTO infosystems.dates (id) VALUES(?);") .
-				setHost("localhost").
-				build();
 
 		env.execute("ActiveMQ Aggregate");
 	}
