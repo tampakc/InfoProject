@@ -17,4 +17,4 @@ In order to use this project, the installation of Java, ActiveMQ, Apache Flink, 
 
 ## Details
 
-For more details of the project please check out the latex file in this repository.
+For more details of the project please check out the pdf file in this repository.
